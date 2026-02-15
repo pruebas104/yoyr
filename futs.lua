@@ -1,90 +1,112 @@
-print("🔍 Verificando si hay hooks instalados...")
-
+print("🔍 Verificando hooks instalados...")
 local hooksInstalados = false
-
--- Guardar referencias ORIGINALES al inicio
-local loadstring_ref = loadstring
-local httpget_ref = game.HttpGet
-local hash_load = tostring(loadstring):sub(-10)
-local hash_http = tostring(game.HttpGet):sub(-10)
-
--- Test 1: Comparar hashes (si cambiaron = fueron hookeados)
-if tostring(loadstring):sub(-10) ~= hash_load then
-    print("🔴 loadstring FUE MODIFICADO")
+local loadstring_original = loadstring
+local httpget_original = game.HttpGet
+local hash_loadstring = tostring(loadstring):sub(-10)
+local hash_httpget = tostring(game.HttpGet):sub(-10)
+if tostring(loadstring):sub(-10) ~= hash_loadstring then
+    print("🔴 loadstring hash cambió")
     hooksInstalados = true
 end
-
-if tostring(game.HttpGet):sub(-10) ~= hash_http then
-    print("🔴 HttpGet FUE MODIFICADO")
+if tostring(game.HttpGet):sub(-10) ~= hash_httpget then
+    print("🔴 HttpGet hash cambió")
     hooksInstalados = true
 end
-
--- Test 2: Verificar si fueron envueltos con newcclosure
+if loadstring ~= loadstring_original then
+    print("🔴 loadstring fue reemplazado")
+    hooksInstalados = true
+end
+if game.HttpGet ~= httpget_original then
+    print("🔴 HttpGet fue reemplazado")
+    hooksInstalados = true
+end
 if debug and debug.getinfo then
-    local info_load = debug.getinfo(loadstring)
-    if info_load and info_load.what ~= "C" then
-        print("🔴 loadstring fue envuelto (no es función C nativa)")
-        hooksInstalados = true
+    local info_ls = debug.getinfo(loadstring)
+    if info_ls then
+        if info_ls.what ~= "C" then
+            print("🔴 loadstring NO es tipo C")
+            hooksInstalados = true
+        end
+        if info_ls.nparams then
+            print("🔴 loadstring tiene parámetros envueltos")
+            hooksInstalados = true
+        end
+        if info_ls.source and info_ls.source ~= "=[C]" then
+            print("🔴 loadstring source no es [C]")
+            hooksInstalados = true
+        end
     end
-    
     local info_http = debug.getinfo(game.HttpGet)
-    if info_http and info_http.what ~= "C" then
-        print("🔴 HttpGet fue envuelto (no es función C nativa)")
-        hooksInstalados = true
+    if info_http then
+        if info_http.what ~= "C" then
+            print("🔴 HttpGet NO es tipo C")
+            hooksInstalados = true
+        end
+        if info_http.source and info_http.source ~= "=[C]" then
+            print("🔴 HttpGet source no es [C]")
+            hooksInstalados = true
+        end
     end
 end
-
--- Test 3: Verificar metatable de game
 local mt = getrawmetatable(game)
-local readonly = isreadonly(mt)
-
-if not readonly then
-    print("🔴 Metatable de game NO es readonly (fue modificada)")
+if not isreadonly(mt) then
+    print("🔴 Metatable NO es readonly")
     hooksInstalados = true
 end
-
--- Test 4: Comparar __namecall actual vs hash original
 if mt.__namecall then
-    local hash_namecall_actual = tostring(mt.__namecall):sub(-10)
-    -- Ejecutar test y guardar hash
-    local test_nc = mt.__namecall
-    local hash_test = tostring(test_nc):sub(-10)
-    
-    -- Si el hash es diferente cada vez = newcclosure usado
-    if hash_namecall_actual ~= hash_test then
-        print("🔴 __namecall fue hookeado con newcclosure")
+    local info_nc = debug and debug.getinfo and debug.getinfo(mt.__namecall)
+    if info_nc then
+        if info_nc.what ~= "C" then
+            print("🔴 __namecall hookeado")
+            hooksInstalados = true
+        end
+        if info_nc.source and info_nc.source ~= "=[C]" then
+            print("🔴 __namecall source modificado")
+            hooksInstalados = true
+        end
+    end
+end
+if mt.__index then
+    local info_idx = debug and debug.getinfo and debug.getinfo(mt.__index)
+    if info_idx and info_idx.what ~= "C" then
+        print("🔴 __index hookeado")
         hooksInstalados = true
     end
 end
-
--- Test 5: Intentar detectar variables de captura persistentes
-local testVars = {
-    "_G.",
-    "_G.", 
-    "_G.",
-    "_G."
-}
-
-for _, varName in ipairs(testVars) do
-    if _G[varName:match("%.(.+)")] then
-        print("🔴 Variable de captura encontrada: " .. varName)
+if _G.loadstring and _G.loadstring ~= loadstring then
+    print("🔴 _G.loadstring modificado")
+    hooksInstalados = true
+end
+local env = getfenv(1)
+if env.loadstring and env.loadstring ~= loadstring_original then
+    print("🔴 entorno loadstring modificado")
+    hooksInstalados = true
+end
+local test_func = loadstring("return 123")
+if test_func then
+    local result = test_func()
+    if result ~= 123 then
+        print("🔴 loadstring retorna valores incorrectos")
         hooksInstalados = true
     end
 end
-
+local test_http = pcall(function()
+    return game:HttpGet("https://httpbin.org/status/200")
+end)
+if not test_http then
+    print("🔴 HttpGet falló en test básico")
+    hooksInstalados = true
+end
 print(string.rep("═", 60))
-
 if hooksInstalados then
-    print("🔴 HAY HOOKS INSTALADOS Y ACTIVOS")
-    print("⚠️ Tu código está siendo interceptado")
-    print("❌ EJECUCIÓN BLOQUEADA POR SEGURIDAD")
+    print("🔴 HOOKS DETECTADOS")
+    print("⚠️ Código interceptado")
+    print("❌ BLOQUEADO")
     print(string.rep("═", 60))
     return
 else
-    print("✅ NO HAY HOOKS INSTALADOS")
-    print("✓ Entorno limpio y seguro")
-    print("▶️ Ejecutando script...")
+    print("✅ ENTORNO LIMPIO")
+    print("▶️ Ejecutando...")
     print(string.rep("═", 60))
-    
     loadstring(game:HttpGet('https://raw.githubusercontent.com/Colato6/Prueba.1/refs/heads/main/Farm.lua'))()
 end
